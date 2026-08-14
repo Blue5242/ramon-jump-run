@@ -1,6 +1,6 @@
 # Ramon Run
 
-Ein schnelles 2D-Jump'n'Run, das direkt im Browser läuft. Das Spiel besteht aus drei handgebauten Levels und benötigt keine externen Bibliotheken oder Downloads.
+Ein schnelles 2D-Jump'n'Run, das direkt im Browser läuft. Nox hat den Aurora-Kern in drei Teile gesprengt. Ramon muss durch Neon City jagen, alle Kernfragmente sichern und das Licht zurückbringen. Das Spiel besteht aus drei handgebauten Levels und benötigt keine externen Bibliotheken oder Downloads.
 
 ## Spielen
 
@@ -10,6 +10,7 @@ Ein schnelles 2D-Jump'n'Run, das direkt im Browser läuft. Das Spiel besteht aus
 
 - **A / D** oder **Pfeiltasten:** Laufen
 - **W / Pfeil hoch / Leertaste:** Springen
+- **Shift / X / E:** Puls-Dash
 - **R:** Aktuelles Level neu starten
 - **P / Escape:** Pause
 - **M:** Ton ein- oder ausschalten
@@ -18,8 +19,12 @@ Ein schnelles 2D-Jump'n'Run, das direkt im Browser läuft. Das Spiel besteht aus
 ## Enthalten
 
 - 3 Levels mit unterschiedlichen Farbstimmungen
+- Story mit einem Kernfragment und einem Missionsziel pro Level
+- Puls-Dash zum Überqueren von Lücken und Besiegen von Gegnern
 - Münzen, Gegner, Stacheln und bewegliche Plattformen
+- Gegner, die Ramon entdecken und verfolgen
 - Checkpoints und drei Leben
+- Dash-Spuren, Aurora-Effekte und stärkere Trefferanimationen
 - Sprungpuffer und Coyote Time für faire Steuerung
 - Lokaler Bestwert im Browser
 - Responsive Darstellung und Touch-Steuerung
