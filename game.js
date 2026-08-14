@@ -14,35 +14,41 @@ const ui = {
   level: document.getElementById("levelValue"),
   coins: document.getElementById("coinValue"),
   lives: document.getElementById("livesValue"),
+  pulse: document.getElementById("pulseValue"),
   time: document.getElementById("timeValue"),
   best: document.getElementById("bestValue"),
+  objective: document.getElementById("objectiveValue"),
   sound: document.getElementById("soundButton"),
   toast: document.getElementById("toast"),
+  dashButton: document.querySelector('[data-control="dash"]'),
 };
 
 const VIEW_W = canvas.width;
 const VIEW_H = canvas.height;
 const GRAVITY = 2050;
 const MAX_FALL_SPEED = 980;
+const DASH_SPEED = 760;
+const DASH_DURATION = 0.17;
+const DASH_COOLDOWN = 0.72;
 const STORAGE_KEY = "ramon-run-best";
 
 const input = {
   held: new Set(),
   pressed: new Set(),
-  touch: { left: false, right: false, jump: false },
-  touchJumpPressed: false,
+  touch: { left: false, right: false, jump: false, dash: false },
+  touchPressed: new Set(),
 
   down(action) {
     return this.held.has(action) || this.touch[action] === true;
   },
 
   justPressed(action) {
-    return this.pressed.has(action) || (action === "jump" && this.touchJumpPressed);
+    return this.pressed.has(action) || this.touchPressed.has(action);
   },
 
   endFrame() {
     this.pressed.clear();
-    this.touchJumpPressed = false;
+    this.touchPressed.clear();
   },
 };
 
@@ -54,6 +60,10 @@ const keyMap = {
   ArrowUp: "jump",
   KeyW: "jump",
   Space: "jump",
+  ShiftLeft: "dash",
+  ShiftRight: "dash",
+  KeyX: "dash",
+  KeyE: "dash",
   KeyP: "pause",
   Escape: "pause",
   KeyR: "restart",
@@ -80,6 +90,8 @@ window.addEventListener("blur", () => {
   input.touch.left = false;
   input.touch.right = false;
   input.touch.jump = false;
+  input.touch.dash = false;
+  input.touchPressed.clear();
 });
 
 document.querySelectorAll("[data-control]").forEach((button) => {
@@ -88,7 +100,7 @@ document.querySelectorAll("[data-control]").forEach((button) => {
   const press = (event) => {
     event.preventDefault();
     button.setPointerCapture?.(event.pointerId);
-    if (action === "jump" && !input.touch.jump) input.touchJumpPressed = true;
+    if (!input.touch[action]) input.touchPressed.add(action);
     input.touch[action] = true;
     button.classList.add("active");
   };
@@ -148,6 +160,15 @@ class AudioEngine {
     this.tone(150, 0.1, "square", 0.045);
   }
 
+  dash() {
+    this.tone(190, 0.13, "sawtooth", 0.035);
+    this.tone(520, 0.1, "triangle", 0.03, 0.035);
+  }
+
+  fragment() {
+    [330, 494, 659, 988].forEach((note, index) => this.tone(note, 0.22, "triangle", 0.045, index * 0.075));
+  }
+
   hurt() {
     this.tone(135, 0.2, "sawtooth", 0.055);
   }
@@ -171,6 +192,9 @@ const E = (x, y, minX, maxX, speed = 72) => ({ x, y, minX, maxX, speed });
 const levelBlueprints = [
   {
     name: "Sunset District",
+    chapter: "KAPITEL I",
+    storyTitle: "Die letzte Dämmerung",
+    storyText: "Das erste Fragment schlägt noch schwach. Nox zieht sich in die Dächer von Midnight Heights zurück.",
     width: 4300,
     palette: {
       skyTop: "#291b55",
@@ -205,10 +229,14 @@ const levelBlueprints = [
     ],
     enemies: [E(980, 438, 900, 1030), E(1850, 438, 1750, 2180, 82), E(2680, 438, 2460, 2990, 88), E(3590, 438, 3460, 3820, 92)],
     checkpoints: [{ x: 2020, y: 410 }],
+    coreFragment: { x: 2225, y: 218 },
     goal: { x: 4115, y: 382, w: 58, h: 88 },
   },
   {
     name: "Midnight Heights",
+    chapter: "KAPITEL II",
+    storyTitle: "Jagd über den Dächern",
+    storyText: "Zwei Fragmente reagieren aufeinander. Tief unter der Stadt erwacht Nox im Aurora-Kern.",
     width: 4800,
     palette: {
       skyTop: "#071326",
@@ -244,10 +272,14 @@ const levelBlueprints = [
     ],
     enemies: [E(150, 438, 70, 350), E(840, 438, 790, 1160, 92), E(1740, 438, 1500, 2020, 96), E(2460, 438, 2260, 2760, 100), E(3230, 438, 3050, 3560, 104), E(4200, 438, 3940, 4500, 110)],
     checkpoints: [{ x: 2420, y: 410 }],
+    coreFragment: { x: 2650, y: 195 },
     goal: { x: 4660, y: 382, w: 58, h: 88 },
   },
   {
     name: "Aurora Core",
+    chapter: "FINALES KAPITEL",
+    storyTitle: "Das Herz der Stadt",
+    storyText: "Der Kern ist vollständig. Nur das Portal trennt Ramon noch von Nox und Neon City vom Morgen.",
     width: 5200,
     palette: {
       skyTop: "#09091e",
@@ -286,6 +318,7 @@ const levelBlueprints = [
     ],
     enemies: [E(100, 438, 60, 290, 100), E(770, 438, 680, 1030, 106), E(1520, 438, 1410, 1830, 112), E(2230, 438, 2140, 2520, 116), E(3040, 438, 2900, 3330, 120), E(3800, 438, 3690, 4140, 124), E(4660, 438, 4470, 4990, 128)],
     checkpoints: [{ x: 2280, y: 410 }, { x: 3890, y: 410 }],
+    coreFragment: { x: 4050, y: 185 },
     goal: { x: 5070, y: 382, w: 58, h: 88 },
   },
 ];
@@ -302,8 +335,12 @@ const game = {
   levelScoreStart: 0,
   lives: 3,
   particles: [],
+  trails: [],
   toastTimer: 0,
+  portalHintTimer: 0,
   shake: 0,
+  flash: 0,
+  flashColor: "85, 245, 255",
   best: Number(localStorage.getItem(STORAGE_KEY)) || 0,
 };
 
@@ -329,8 +366,10 @@ function cloneLevel(blueprint) {
       h: 32,
       dir: index % 2 === 0 ? 1 : -1,
       alive: true,
+      alert: 0,
     })),
     checkpoints: blueprint.checkpoints.map((checkpoint) => ({ ...checkpoint, reached: false })),
+    coreFragment: { ...blueprint.coreFragment, collected: false, bob: blueprint.coreFragment.x * 0.01 },
     goal: { ...blueprint.goal },
   };
 }
@@ -351,6 +390,9 @@ function makePlayer(spawn) {
     coyote: 0,
     jumpBuffer: 0,
     invulnerable: 0,
+    dashTime: 0,
+    dashCooldown: 0,
+    trailTimer: 0,
     spawn: { ...spawn },
     runCycle: 0,
   };
@@ -363,7 +405,10 @@ function loadLevel(index, resetRun = false) {
   game.cameraX = 0;
   game.elapsed = 0;
   game.particles = [];
+  game.trails = [];
+  game.portalHintTimer = 0;
   game.shake = 0;
+  game.flash = 0;
 
   if (resetRun) {
     game.score = 0;
@@ -381,7 +426,7 @@ function beginGame() {
   game.state = "playing";
   ui.startScreen.classList.add("hidden");
   ui.messageScreen.classList.add("hidden");
-  showToast("LEVEL 1 · SUNSET DISTRICT");
+  showToast("KAPITEL I · DIE LETZTE DÄMMERUNG");
 }
 
 function restartLevel() {
@@ -407,7 +452,7 @@ function nextLevel() {
   loadLevel(game.levelIndex + 1, false);
   game.state = "playing";
   hideMessage();
-  showToast(`LEVEL ${game.levelIndex + 1} · ${game.level.name.toUpperCase()}`);
+  showToast(`${game.level.chapter} · ${game.level.name.toUpperCase()}`);
 }
 
 function pauseToggle() {
@@ -455,6 +500,13 @@ function updateHud() {
   ui.level.textContent = `${game.levelIndex + 1} / ${levelBlueprints.length}`;
   ui.coins.textContent = `${collected} / ${game.level.coins.length}`;
   ui.lives.textContent = Array.from({ length: 3 }, (_, index) => (index < game.lives ? "♥" : "♡")).join(" ");
+  const dashReady = game.player && game.player.dashCooldown <= 0;
+  ui.pulse.textContent = dashReady ? "BEREIT" : `${game.player.dashCooldown.toFixed(1)}s`;
+  ui.pulse.closest(".hud-item")?.classList.toggle("charging", !dashReady);
+  ui.dashButton?.classList.toggle("cooling", !dashReady);
+  ui.objective.textContent = game.level.coreFragment.collected
+    ? "Mission: Kernfragment gesichert – erreiche das Portal"
+    : "Mission: Finde das Kernfragment und erreiche das Portal";
   ui.time.textContent = formatTime(game.totalElapsed);
   ui.best.textContent = game.best ? formatTime(game.best) : "–";
 }
@@ -484,6 +536,7 @@ function updatePlayer(dt) {
   player.prevX = player.x;
   player.prevY = player.y;
   player.invulnerable = Math.max(0, player.invulnerable - dt);
+  player.dashCooldown = Math.max(0, player.dashCooldown - dt);
   player.coyote = player.onGround ? 0.11 : Math.max(0, player.coyote - dt);
   player.jumpBuffer = input.justPressed("jump") ? 0.13 : Math.max(0, player.jumpBuffer - dt);
 
@@ -496,33 +549,67 @@ function updatePlayer(dt) {
   const acceleration = player.onGround ? 2300 : 1450;
   const maxSpeed = 330;
 
-  if (move !== 0) {
-    player.vx += move * acceleration * dt;
-    player.vx = Math.max(-maxSpeed, Math.min(maxSpeed, player.vx));
-    player.facing = move;
-    player.runCycle += Math.abs(player.vx) * dt * 0.045;
-  } else {
-    const drag = player.onGround ? 0.78 : 0.93;
-    player.vx *= Math.pow(drag, dt * 60);
-    if (Math.abs(player.vx) < 2) player.vx = 0;
-  }
+  if (move !== 0 && player.dashTime <= 0) player.facing = move;
 
-  if (player.jumpBuffer > 0 && player.coyote > 0) {
-    player.vy = -710;
+  if (input.justPressed("dash") && player.dashCooldown <= 0) {
+    player.dashTime = DASH_DURATION;
+    player.dashCooldown = DASH_COOLDOWN;
+    player.vx = player.facing * DASH_SPEED;
+    player.vy = 0;
     player.onGround = false;
     player.standingOn = null;
-    player.coyote = 0;
-    player.jumpBuffer = 0;
-    spawnParticles(player.x + player.w / 2, player.y + player.h, "#7df8ff", 8, 120);
-    audio.jump();
+    player.invulnerable = Math.max(player.invulnerable, DASH_DURATION + 0.04);
+    player.trailTimer = 0;
+    game.shake = Math.max(game.shake, 0.08);
+    game.flash = 0.08;
+    game.flashColor = "85, 245, 255";
+    spawnParticles(player.x + player.w / 2, player.y + player.h / 2, "#55f5ff", 14, 220);
+    audio.dash();
   }
 
-  if (!input.down("jump") && player.vy < -250) player.vy += GRAVITY * 1.15 * dt;
+  const dashing = player.dashTime > 0;
+  if (dashing) {
+    player.dashTime = Math.max(0, player.dashTime - dt);
+    player.vx = player.facing * DASH_SPEED;
+    player.vy = 0;
+    player.trailTimer -= dt;
+    if (player.trailTimer <= 0) {
+      game.trails.push({ x: player.x, y: player.y, facing: player.facing, life: 0.2, maxLife: 0.2 });
+      player.trailTimer = 0.028;
+    }
+  } else {
+    if (move !== 0) {
+      player.vx += move * acceleration * dt;
+      player.vx = Math.max(-maxSpeed, Math.min(maxSpeed, player.vx));
+      player.runCycle += Math.abs(player.vx) * dt * 0.045;
+    } else {
+      const drag = player.onGround ? 0.78 : 0.93;
+      player.vx *= Math.pow(drag, dt * 60);
+      if (Math.abs(player.vx) < 2) player.vx = 0;
+    }
+
+    if (player.jumpBuffer > 0 && player.coyote > 0) {
+      player.vy = -710;
+      player.onGround = false;
+      player.standingOn = null;
+      player.coyote = 0;
+      player.jumpBuffer = 0;
+      spawnParticles(player.x + player.w / 2, player.y + player.h, "#7df8ff", 8, 120);
+      audio.jump();
+    }
+
+    if (!input.down("jump") && player.vy < -250) player.vy += GRAVITY * 1.15 * dt;
+  }
 
   player.x += player.vx * dt;
+  const speedBeforeCollision = player.vx;
   resolveHorizontal(player);
+  if (dashing && speedBeforeCollision !== 0 && player.vx === 0) {
+    player.dashTime = 0;
+    game.shake = Math.max(game.shake, 0.12);
+  }
 
-  player.vy = Math.min(MAX_FALL_SPEED, player.vy + GRAVITY * dt);
+  if (!dashing) player.vy = Math.min(MAX_FALL_SPEED, player.vy + GRAVITY * dt);
   player.y += player.vy * dt;
   resolveVertical(player);
 
@@ -584,7 +671,11 @@ function updateEnemies(dt) {
 
   for (const enemy of game.level.enemies) {
     if (!enemy.alive) continue;
-    enemy.x += enemy.dir * enemy.speed * dt;
+    const distanceToPlayer = player.x + player.w / 2 - (enemy.x + enemy.w / 2);
+    const canSeePlayer = Math.abs(distanceToPlayer) < 270 && Math.abs(player.y - enemy.y) < 105;
+    enemy.alert += ((canSeePlayer ? 1 : 0) - enemy.alert) * Math.min(1, dt * 7);
+    if (canSeePlayer && Math.abs(distanceToPlayer) > 22) enemy.dir = Math.sign(distanceToPlayer);
+    enemy.x += enemy.dir * enemy.speed * (1 + enemy.alert * 0.65) * dt;
     if (enemy.x <= enemy.minX) {
       enemy.x = enemy.minX;
       enemy.dir = 1;
@@ -594,6 +685,15 @@ function updateEnemies(dt) {
     }
 
     if (!rectsOverlap(player, enemy, 4)) continue;
+    if (player.dashTime > 0) {
+      enemy.alive = false;
+      game.score += 260;
+      game.shake = Math.max(game.shake, 0.16);
+      audio.stomp();
+      spawnParticles(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, "#55f5ff", 22, 260);
+      showToast("PULS-TREFFER · +260");
+      continue;
+    }
     const stomped = player.vy > 140 && player.prevY + player.h <= enemy.y + 10;
     if (stomped) {
       enemy.alive = false;
@@ -622,6 +722,23 @@ function updateCoins() {
   }
 }
 
+function updateCoreFragment() {
+  const fragment = game.level.coreFragment;
+  if (fragment.collected) return;
+  const hitbox = { x: fragment.x - 18, y: fragment.y - 22, w: 36, h: 44 };
+  if (!rectsOverlap(game.player, hitbox)) return;
+
+  fragment.collected = true;
+  game.score += 750;
+  game.shake = 0.24;
+  game.flash = 0.28;
+  game.flashColor = "255, 230, 109";
+  audio.fragment();
+  spawnParticles(fragment.x, fragment.y, "#ffe66d", 34, 290);
+  spawnParticles(fragment.x, fragment.y, game.level.palette.edge, 22, 220);
+  showToast(`KERNFRAGMENT ${game.levelIndex + 1} / ${levelBlueprints.length} GESICHERT`);
+}
+
 function updateHazards() {
   const player = game.player;
   for (const hazard of game.level.hazards) {
@@ -638,6 +755,8 @@ function hurtPlayer() {
 
   game.lives -= 1;
   game.shake = 0.32;
+  game.flash = 0.2;
+  game.flashColor = "255, 79, 139";
   audio.hurt();
   spawnParticles(player.x + player.w / 2, player.y + player.h / 2, "#ff4f8b", 18, 210);
 
@@ -657,6 +776,8 @@ function hurtPlayer() {
   player.y = player.spawn.y;
   player.vx = 0;
   player.vy = 0;
+  player.dashTime = 0;
+  player.dashCooldown = 0;
   player.invulnerable = 1.35;
   player.standingOn = null;
   game.cameraX = Math.max(0, player.x - 220);
@@ -667,15 +788,25 @@ function hurtPlayer() {
 function checkGoal() {
   if (!rectsOverlap(game.player, game.level.goal, 3)) return;
 
+  if (!game.level.coreFragment.collected) {
+    if (game.portalHintTimer <= 0) {
+      showToast("PORTAL GESPERRT · KERNFRAGMENT FEHLT");
+      game.portalHintTimer = 1.6;
+      audio.tone(115, 0.16, "sawtooth", 0.035);
+    }
+    game.player.vx = -game.player.facing * 190;
+    return;
+  }
+
   game.state = "levelComplete";
   game.score += 1000 + game.lives * 250;
   audio.win();
 
   if (game.levelIndex < levelBlueprints.length - 1) {
     showMessage(
-      "LEVEL GESCHAFFT",
-      game.levelIndex === 0 ? "Der Himmel wird dunkel" : "Nur noch der Kern",
-      `${game.level.coins.filter((coin) => coin.collected).length} Kristalle gesammelt · ${formatTime(game.elapsed)}`,
+      `${game.level.chapter} GESCHAFFT`,
+      game.level.storyTitle,
+      `${game.level.storyText} ${game.level.coins.filter((coin) => coin.collected).length} Kristalle · ${formatTime(game.elapsed)}`,
       "NÄCHSTES LEVEL",
       nextLevel,
     );
@@ -687,9 +818,9 @@ function checkGoal() {
       localStorage.setItem(STORAGE_KEY, String(runTime));
     }
     showMessage(
-      "SPIEL GESCHAFFT",
-      isBest ? "Neuer Bestwert!" : "Skyline bezwungen!",
-      `Zeit: ${formatTime(runTime)} · Punkte: ${game.score}`,
+      "NEON CITY IST GERETTET",
+      isBest ? "Das Licht kehrt zurück" : "Nox ist besiegt",
+      `Ramon setzt den Aurora-Kern zusammen – zum ersten Mal seit Jahren sieht die Stadt den Morgen. Zeit: ${formatTime(runTime)} · Punkte: ${game.score}`,
       "NOCH EIN LAUF",
       beginGame,
     );
@@ -725,6 +856,11 @@ function updateParticles(dt) {
   game.particles = game.particles.filter((particle) => particle.life > 0);
 }
 
+function updateTrails(dt) {
+  for (const trail of game.trails) trail.life -= dt;
+  game.trails = game.trails.filter((trail) => trail.life > 0);
+}
+
 function update(dt) {
   if (input.justPressed("mute")) toggleSound();
   if (input.justPressed("pause") && ["playing", "paused"].includes(game.state)) pauseToggle();
@@ -734,9 +870,12 @@ function update(dt) {
     game.toastTimer -= dt;
     if (game.toastTimer <= 0) ui.toast.classList.remove("show");
   }
+  game.portalHintTimer = Math.max(0, game.portalHintTimer - dt);
+  game.flash = Math.max(0, game.flash - dt);
 
   if (game.state !== "playing") {
     updateParticles(dt);
+    updateTrails(dt);
     input.endFrame();
     return;
   }
@@ -749,9 +888,11 @@ function update(dt) {
   updatePlayer(dt);
   updateEnemies(dt);
   updateCoins();
+  updateCoreFragment();
   updateHazards();
   checkGoal();
   updateParticles(dt);
+  updateTrails(dt);
 
   const targetCamera = Math.max(0, Math.min(game.level.width - VIEW_W, game.player.x - VIEW_W * 0.34));
   game.cameraX += (targetCamera - game.cameraX) * Math.min(1, dt * 5.5);
@@ -807,9 +948,33 @@ function drawBackground() {
   }
   ctx.globalAlpha = 1;
 
+  drawAurora(camera, palette);
+
   drawMountainLayer(camera * 0.08, 325, 75, palette.far, 210);
   drawMountainLayer(camera * 0.16, 390, 96, palette.near, 175);
   drawCityLayer(camera * 0.28, palette.near);
+}
+
+function drawAurora(camera, palette) {
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (let ribbon = 0; ribbon < 3; ribbon += 1) {
+    const gradient = ctx.createLinearGradient(0, 40 + ribbon * 50, VIEW_W, 220);
+    gradient.addColorStop(0, "transparent");
+    gradient.addColorStop(0.35, `${palette.edge}28`);
+    gradient.addColorStop(0.7, `${palette.accent}22`);
+    gradient.addColorStop(1, "transparent");
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 18 + ribbon * 9;
+    ctx.beginPath();
+    for (let x = -80; x <= VIEW_W + 80; x += 40) {
+      const y = 95 + ribbon * 42 + Math.sin(x * 0.008 + game.totalElapsed * 0.55 + ribbon - camera * 0.0008) * (19 + ribbon * 4);
+      if (x === -80) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawMountainLayer(offset, baseline, height, color, spacing) {
@@ -855,8 +1020,10 @@ function drawWorld() {
   drawPlatforms();
   drawHazards();
   drawGoal();
+  drawCoreFragment();
   drawCoins();
   drawEnemies();
+  drawDashTrails();
   drawParticles();
   drawPlayer();
 
@@ -943,6 +1110,62 @@ function drawCoins() {
   }
 }
 
+function drawCoreFragment() {
+  const fragment = game.level.coreFragment;
+  if (fragment.collected) return;
+  const y = fragment.y + Math.sin(game.elapsed * 3.2 + fragment.bob) * 9;
+  const spin = game.elapsed * 1.5;
+  ctx.save();
+  ctx.translate(fragment.x, y);
+  ctx.rotate(spin * 0.16);
+  ctx.globalCompositeOperation = "screen";
+  const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, 52);
+  glow.addColorStop(0, "rgba(255,255,255,0.9)");
+  glow.addColorStop(0.28, `${game.level.palette.edge}aa`);
+  glow.addColorStop(1, "transparent");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(0, 0, 52, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.shadowColor = "#ffe66d";
+  ctx.shadowBlur = 24;
+  ctx.fillStyle = "#ffe66d";
+  ctx.beginPath();
+  ctx.moveTo(0, -23);
+  ctx.lineTo(17, -6);
+  ctx.lineTo(10, 21);
+  ctx.lineTo(-10, 21);
+  ctx.lineTo(-17, -6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "rgba(255,255,255,0.78)";
+  ctx.beginPath();
+  ctx.moveTo(-5, -13);
+  ctx.lineTo(7, -4);
+  ctx.lineTo(1, 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawDashTrails() {
+  for (const trail of game.trails) {
+    const alpha = Math.max(0, trail.life / trail.maxLife) * 0.4;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(trail.x + game.player.w / 2, trail.y + game.player.h / 2);
+    ctx.scale(trail.facing, 1);
+    ctx.fillStyle = "#55f5ff";
+    ctx.shadowColor = "#9f72ff";
+    ctx.shadowBlur = 24;
+    roundedRect(ctx, -17, -23, 34, 46, 12);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 function drawEnemies() {
   for (const enemy of game.level.enemies) {
     if (!enemy.alive) continue;
@@ -950,8 +1173,8 @@ function drawEnemies() {
     ctx.save();
     ctx.translate(enemy.x + enemy.w / 2, enemy.y + enemy.h);
     ctx.scale(1 / squash, squash);
-    ctx.shadowColor = game.level.palette.accent;
-    ctx.shadowBlur = 13;
+    ctx.shadowColor = enemy.alert > 0.35 ? "#ff4f8b" : game.level.palette.accent;
+    ctx.shadowBlur = 13 + enemy.alert * 12;
     const gradient = ctx.createLinearGradient(0, -enemy.h, 0, 0);
     gradient.addColorStop(0, game.level.palette.accent);
     gradient.addColorStop(1, "#4a226f");
@@ -964,9 +1187,16 @@ function drawEnemies() {
     ctx.closePath();
     ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "#0c0e20";
+    ctx.fillStyle = enemy.alert > 0.35 ? "#fff4f8" : "#0c0e20";
     ctx.fillRect(-9, -21, 4, 6);
     ctx.fillRect(6, -21, 4, 6);
+    if (enemy.alert > 0.62) {
+      ctx.globalAlpha = Math.min(1, (enemy.alert - 0.62) * 3);
+      ctx.fillStyle = "#ff6aa7";
+      ctx.font = "900 20px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText("!", 0, -enemy.h - 13);
+    }
     ctx.restore();
   }
 }
@@ -975,6 +1205,7 @@ function drawPlayer() {
   const player = game.player;
   if (player.invulnerable > 0 && Math.floor(player.invulnerable * 12) % 2 === 0) return;
 
+  const dashing = player.dashTime > 0;
   const moving = Math.abs(player.vx) > 15 && player.onGround;
   const legSwing = moving ? Math.sin(player.runCycle) * 5 : 0;
   const lean = Math.max(-0.12, Math.min(0.12, player.vx / 1800));
@@ -982,14 +1213,14 @@ function drawPlayer() {
   ctx.save();
   ctx.translate(player.x + player.w / 2, player.y + player.h / 2);
   ctx.scale(player.facing, 1);
-  ctx.rotate(lean);
+  ctx.rotate(dashing ? 0.18 : lean);
 
-  ctx.strokeStyle = "#ff4fb8";
-  ctx.lineWidth = 5;
+  ctx.strokeStyle = dashing ? "#ffe66d" : "#ff4fb8";
+  ctx.lineWidth = dashing ? 7 : 5;
   ctx.lineCap = "round";
   ctx.beginPath();
   ctx.moveTo(-10, -5);
-  ctx.quadraticCurveTo(-25 - Math.abs(player.vx) * 0.025, 2, -29 - Math.abs(player.vx) * 0.04, 13);
+  ctx.quadraticCurveTo(-25 - Math.abs(player.vx) * 0.025, 2, -29 - Math.abs(player.vx) * 0.04, dashing ? 3 : 13);
   ctx.stroke();
 
   ctx.strokeStyle = "#11162c";
@@ -1006,7 +1237,7 @@ function drawPlayer() {
   suit.addColorStop(1, "#4c7cff");
   ctx.fillStyle = suit;
   ctx.shadowColor = "#55f5ff";
-  ctx.shadowBlur = 16;
+  ctx.shadowBlur = dashing ? 34 : 16;
   roundedRect(ctx, -14, -17, 28, 36, 9);
   ctx.fill();
   ctx.shadowBlur = 0;
@@ -1018,6 +1249,18 @@ function drawPlayer() {
   ctx.fillRect(3, -18, 4, 4);
   ctx.fillStyle = "rgba(255,255,255,0.7)";
   ctx.fillRect(-8, -20, 8, 3);
+
+  ctx.fillStyle = dashing ? "#ffe66d" : "#f2fbff";
+  ctx.shadowColor = dashing ? "#ffe66d" : "#55f5ff";
+  ctx.shadowBlur = dashing ? 18 : 8;
+  ctx.beginPath();
+  ctx.moveTo(0, -6);
+  ctx.lineTo(5, -1);
+  ctx.lineTo(0, 5);
+  ctx.lineTo(-5, -1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
 
   ctx.strokeStyle = "#d9fbff";
   ctx.lineWidth = 5;
@@ -1046,22 +1289,34 @@ function drawCheckpoints() {
 
 function drawGoal() {
   const goal = game.level.goal;
+  const unlocked = game.level.coreFragment.collected;
+  const portalColor = unlocked ? game.level.palette.edge : "#ff4f8b";
   const pulse = 0.75 + Math.sin(game.elapsed * 4) * 0.12;
   ctx.save();
   ctx.translate(goal.x + goal.w / 2, goal.y + goal.h / 2);
-  ctx.shadowColor = game.level.palette.edge;
-  ctx.shadowBlur = 32;
-  ctx.strokeStyle = game.level.palette.edge;
+  ctx.shadowColor = portalColor;
+  ctx.shadowBlur = unlocked ? 32 : 15;
+  ctx.strokeStyle = portalColor;
   ctx.lineWidth = 7;
-  ctx.globalAlpha = pulse;
+  ctx.globalAlpha = unlocked ? pulse : 0.48;
   ctx.beginPath();
   ctx.ellipse(0, 0, goal.w * 0.43, goal.h * 0.48, 0, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.globalAlpha = 0.32;
-  ctx.fillStyle = game.level.palette.edge;
+  ctx.globalAlpha = unlocked ? 0.32 : 0.12;
+  ctx.fillStyle = portalColor;
   ctx.beginPath();
   ctx.ellipse(0, 0, goal.w * 0.31, goal.h * 0.4, 0, 0, Math.PI * 2);
   ctx.fill();
+  if (!unlocked) {
+    ctx.globalAlpha = 0.78;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(-18, -25);
+    ctx.lineTo(18, 25);
+    ctx.moveTo(18, -25);
+    ctx.lineTo(-18, 25);
+    ctx.stroke();
+  }
   ctx.globalAlpha = 1;
   ctx.shadowBlur = 0;
   ctx.restore();
@@ -1087,10 +1342,17 @@ function drawVignette() {
   for (let y = 0; y < VIEW_H; y += 4) ctx.fillRect(0, y, VIEW_W, 1);
 }
 
+function drawFlash() {
+  if (game.flash <= 0) return;
+  ctx.fillStyle = `rgba(${game.flashColor}, ${Math.min(0.42, game.flash * 1.55)})`;
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+}
+
 function draw() {
   drawBackground();
   if (game.level && game.player) drawWorld();
   drawVignette();
+  drawFlash();
 }
 
 function toggleSound() {
