@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#090b1a" />
-    <meta name="description" content="Ramon Run – ein schnelles 2D-Jump'n'Run direkt im Browser." />
+    <meta name="description" content="Ramon Run – rette Neon City in einem schnellen 2D-Jump'n'Run direkt im Browser." />
     <title>Ramon Run</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -23,6 +23,7 @@
           <div class="hud-item"><span>LEVEL</span><strong id="levelValue">1 / 3</strong></div>
           <div class="hud-item"><span>KRISTALLE</span><strong id="coinValue">0 / 0</strong></div>
           <div class="hud-item"><span>LEBEN</span><strong id="livesValue">♥ ♥ ♥</strong></div>
+          <div class="hud-item pulse-item"><span>PULS-DASH</span><strong id="pulseValue">BEREIT</strong></div>
           <div class="hud-item"><span>ZEIT</span><strong id="timeValue">00:00</strong></div>
         </div>
 
@@ -34,13 +35,14 @@
 
         <div id="startScreen" class="screen-overlay">
           <div class="panel hero-panel">
-            <p class="eyebrow">3 LEVEL · 1 ZIEL</p>
+            <p class="eyebrow">DIE NACHT OHNE LICHT</p>
             <h1>RAMON<br /><span>RUN</span></h1>
-            <p class="intro">Sammle Energiekristalle, besiege die Schatten und erreiche das Portal.</p>
-            <button id="startButton" class="primary-button" type="button">SPIEL STARTEN</button>
+            <p class="intro">Nox hat den Aurora-Kern in drei Teile gesprengt. Jage durch Neon City, finde die Kernfragmente und bring das Licht zurück.</p>
+            <button id="startButton" class="primary-button" type="button">MISSION STARTEN</button>
             <div class="controls-hint">
               <span><kbd>A</kbd><kbd>D</kbd> Laufen</span>
               <span><kbd>W</kbd> / <kbd>Leertaste</kbd> Springen</span>
+              <span><kbd>SHIFT</kbd> / <kbd>X</kbd> Puls-Dash</span>
               <span><kbd>R</kbd> Neustart</span>
               <span><kbd>P</kbd> Pause</span>
             </div>
@@ -63,12 +65,15 @@
             <button class="touch-button" data-control="left" type="button" aria-label="Nach links">◀</button>
             <button class="touch-button" data-control="right" type="button" aria-label="Nach rechts">▶</button>
           </div>
-          <button class="touch-button jump-button" data-control="jump" type="button" aria-label="Springen">SPRUNG</button>
+          <div class="action-controls">
+            <button class="touch-button dash-button" data-control="dash" type="button" aria-label="Puls-Dash">DASH</button>
+            <button class="touch-button jump-button" data-control="jump" type="button" aria-label="Springen">SPRUNG</button>
+          </div>
         </div>
       </section>
 
       <footer class="footer-note">
-        <span>Ziel: Erreiche das leuchtende Portal</span>
+        <span id="objectiveValue">Mission: Finde das Kernfragment und erreiche das Portal</span>
         <span>Bestwert: <strong id="bestValue">–</strong></span>
       </footer>
     </main>
