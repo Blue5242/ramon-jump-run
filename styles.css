@@ -133,6 +133,16 @@ button {
   color: #ff6eaf;
 }
 
+.pulse-item strong {
+  color: var(--cyan);
+  text-shadow: 0 0 14px rgba(85, 245, 255, 0.48);
+}
+
+.pulse-item.charging strong {
+  color: var(--muted);
+  text-shadow: none;
+}
+
 .icon-button,
 .primary-button,
 .touch-button {
@@ -332,6 +342,12 @@ kbd {
   gap: 10px;
 }
 
+.action-controls {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}
+
 .touch-button {
   display: grid;
   width: 60px;
@@ -352,6 +368,19 @@ kbd {
   color: #061016;
   font-size: 0.7rem;
   background: rgba(85, 245, 255, 0.84);
+}
+
+.dash-button {
+  width: 78px;
+  border-color: rgba(255, 79, 184, 0.52);
+  color: white;
+  font-size: 0.68rem;
+  background: linear-gradient(145deg, rgba(159, 114, 255, 0.92), rgba(255, 79, 184, 0.82));
+  box-shadow: 0 0 24px rgba(159, 114, 255, 0.18);
+}
+
+.dash-button.cooling {
+  filter: saturate(0.2) brightness(0.7);
 }
 
 .footer-note {
@@ -375,7 +404,7 @@ kbd {
 
   .brand div,
   .hud-item span,
-  .hud-item:nth-child(4),
+  .hud-item:nth-child(5),
   .footer-note span:first-child {
     display: none;
   }
@@ -450,6 +479,10 @@ kbd {
 
   .jump-button {
     width: 78px;
+  }
+
+  .dash-button {
+    width: 64px;
   }
 }
 
